@@ -1,0 +1,95 @@
+name: Release Helm Charts
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  release:
+    name: Package and push charts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} \
+            --username ${{ github.actor }} \
+            --password-stdin
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # ── Platform services chart ───────────────────────────────────────────
+      - name: Package wso2-agentic-engineer
+        run: |
+          helm package bundle/charts/wso2-agentic-engineer \
+            --version ${{ steps.version.outputs.version }} \
+            --destination /tmp/charts
+
+      - name: Push wso2-agentic-engineer
+        run: |
+          helm push /tmp/charts/wso2-agentic-engineer-${{ steps.version.outputs.version }}.tgz \
+            oci://${{ env.REGISTRY }}/${{ env.OWNER }}
+
+      # ── OC registration chart ─────────────────────────────────────────────
+      - name: Package wso2-ae-platform-resources
+        run: |
+          helm package bundle/charts/wso2-ae-platform-resources \
+            --version ${{ steps.version.outputs.version }} \
+            --destination /tmp/charts
+
+      - name: Push wso2-ae-platform-resources
+        run: |
+          helm push /tmp/charts/wso2-ae-platform-resources-${{ steps.version.outputs.version }}.tgz \
+            oci://${{ env.REGISTRY }}/${{ env.OWNER }}
+
+      # ── Bundle chart (update Chart.yaml version then package) ─────────────
+      - name: Stamp bundle version
+        run: |
+          sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" bundle/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.version }}\"/" bundle/Chart.yaml
+          # Also stamp vendored sub-chart versions so they match
+          sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" \
+            bundle/charts/wso2-agentic-engineer/Chart.yaml \
+            bundle/charts/wso2-ae-platform-resources/Chart.yaml
+          # Update dependency versions in bundle Chart.yaml
+          sed -i "s/version: \"0\.1\.0\"/version: \"${{ steps.version.outputs.version }}\"/g" \
+            bundle/Chart.yaml
+
+      - name: Package bundle
+        run: |
+          helm package bundle \
+            --version ${{ steps.version.outputs.version }} \
+            --destination /tmp/charts
+
+      - name: Push bundle
+        run: |
+          helm push /tmp/charts/wso2-agentic-engineer-bundle-${{ steps.version.outputs.version }}.tgz \
+            oci://${{ env.REGISTRY }}/${{ env.OWNER }}
+
+      - name: Summary
+        run: |
+          echo "## Charts published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Chart | OCI URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| wso2-agentic-engineer | \`oci://${{ env.REGISTRY }}/${{ env.OWNER }}/wso2-agentic-engineer:${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| wso2-ae-platform-resources | \`oci://${{ env.REGISTRY }}/${{ env.OWNER }}/wso2-ae-platform-resources:${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| wso2-agentic-engineer-bundle | \`oci://${{ env.REGISTRY }}/${{ env.OWNER }}/wso2-agentic-engineer-bundle:${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
