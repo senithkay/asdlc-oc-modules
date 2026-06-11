@@ -1,0 +1,24 @@
+# HTTPRoute: exposes the Agentic Engineer console through the OpenChoreo gateway.
+#
+# BEFORE APPLYING: set AE_CONSOLE_HOSTNAME
+#   export AE_CONSOLE_HOSTNAME=asdlc.example.com
+#   envsubst < resources/httproute-console.yaml | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: asdlc-console
+  namespace: wso2-ae
+spec:
+  parentRefs:
+    - name: gateway-default
+      namespace: openchoreo-control-plane
+  hostnames:
+    - "${AE_CONSOLE_HOSTNAME}"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: asdlc-console
+          port: 3000

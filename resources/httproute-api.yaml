@@ -1,0 +1,24 @@
+# HTTPRoute: exposes the Agentic Engineer API through the OpenChoreo gateway.
+#
+# BEFORE APPLYING: set AE_API_HOSTNAME
+#   export AE_API_HOSTNAME=asdlc-api.example.com
+#   envsubst < resources/httproute-api.yaml | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: asdlc-api
+  namespace: wso2-ae
+spec:
+  parentRefs:
+    - name: gateway-default
+      namespace: openchoreo-control-plane
+  hostnames:
+    - "${AE_API_HOSTNAME}"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: asdlc-api
+          port: 9090
