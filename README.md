@@ -63,77 +63,25 @@ helm install gateway-operator \
   --set gateway.helm.chartVersion="0.9.0"
 ```
 
-## Step 2 — Create required Kubernetes secrets
+## Step 3 — Install the platform services
 
-These must exist in the `wso2-ae` namespace before installing the chart.
-
-```bash
-kubectl create namespace wso2-ae
-
-# PostgreSQL password
-kubectl create secret generic asdlc-postgres \
-  --namespace wso2-ae \
-  --from-literal=password=<your-db-password>
-
-# GitHub credentials (OAUTH_STATE_SIGNING_KEY is required; App fields optional)
-kubectl create secret generic asdlc-github \
-  --namespace wso2-ae \
-  --from-literal=GITHUB_WEBHOOK_SECRET=<webhook-secret> \
-  --from-literal=OAUTH_STATE_SIGNING_KEY=<random-32-hex> \
-  --from-literal=GITHUB_APP_ID="" \
-  --from-literal=GITHUB_CLIENT_ID="" \
-  --from-literal=GITHUB_CLIENT_SECRET=""
-
-# Task JWT signing key (RSA private key, PEM format)
-kubectl create secret generic asdlc-task-signing-key \
-  --namespace wso2-ae \
-  --from-file=task-signing.pem=<path-to-key.pem>
-
-# GitHub App private key (optional — only for App-mode GitHub connect)
-kubectl create secret generic asdlc-github-app-key \
-  --namespace wso2-ae \
-  --from-file=private-key.pem=<path-to-github-app-key.pem>
-
-# OpenBao token
-kubectl create secret generic asdlc-openbao \
-  --namespace wso2-ae \
-  --from-literal=token=<openbao-token>
-
-# Anthropic API key (platform fallback)
-kubectl create secret generic asdlc-anthropic \
-  --namespace wso2-ae \
-  --from-literal=ANTHROPIC_API_KEY=<your-anthropic-key>
-```
-
-Generate the task signing key if you don't have one:
-```bash
-openssl genpkey -algorithm RSA -out task-signing.pem -pkeyopt rsa_keygen_bits:2048
-```
-
-## Step 3 — Install the platform services Helm chart
+Edit `values/agentic-engineer.yaml` with your domain and Anthropic key, then:
 
 ```bash
 helm install wso2-agentic-engineer \
   oci://ghcr.io/senithkay/wso2-agentic-engineer \
+  --version 0.1.0 \
   --namespace wso2-ae \
-  --set console.publicURL=https://asdlc.example.com \
-  --set console.thunderPublicURL=https://thunder.example.com
+  --create-namespace \
+  -f values/agentic-engineer.yaml
 ```
 
-Or with a values file:
-```bash
-helm install wso2-agentic-engineer \
-  oci://ghcr.io/senithkay/wso2-agentic-engineer \
-  --namespace wso2-ae \
-  -f my-values.yaml
-```
+No manual secret creation needed — the chart auto-generates `GITHUB_WEBHOOK_SECRET`,
+`OAUTH_STATE_SIGNING_KEY`, the RSA task signing key, and the PostgreSQL password on first install.
 
-## Step 4 — Register into OpenChoreo (this repo)
+## Step 4 — Register into OpenChoreo
 
 ```bash
-git clone https://github.com/senithkay/asdlc-oc-modules.git
-cd asdlc-oc-modules
-
 # Wait for OC controller webhook
 kubectl wait -n openchoreo-control-plane \
   --for=condition=available --timeout=300s \
@@ -143,8 +91,9 @@ kubectl apply -f resources/rbac.yaml
 kubectl apply -f resources/docker-build-workflow.yaml
 kubectl apply -f resources/app-factory-coding-agent.yaml
 
-helm install wso2-ae-platform-resources ./helm \
-  --set authz.apiClientId=asdlc-api-client
+helm install wso2-ae-platform-resources \
+  oci://ghcr.io/senithkay/wso2-ae-platform-resources \
+  --version 0.1.0
 ```
 
 ## Step 5 — Expose via the OC gateway

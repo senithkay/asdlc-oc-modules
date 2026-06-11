@@ -1,0 +1,28 @@
+# Values override file for wso2-agentic-engineer on an OpenChoreo cluster.
+# Pass this with: helm install wso2-agentic-engineer ... -f values/agentic-engineer.yaml
+#
+# Fill in the values marked with <...> before installing.
+
+# ── Public URLs ───────────────────────────────────────────────────────────────
+# DNS hostnames you will point at the OC gateway LoadBalancer IP.
+console:
+  publicURL: "https://asdlc.<your-domain>"
+  thunderPublicURL: "https://thunder.<your-domain>"
+
+# ── Anthropic API key ─────────────────────────────────────────────────────────
+# Platform-level fallback key. Required for AI flows.
+anthropic:
+  apiKey: "<your-anthropic-api-key>"
+
+# ── OpenBao token ─────────────────────────────────────────────────────────────
+# Override "root" default for production.
+openbao:
+  token: "<your-openbao-token>"
+
+# ── GitHub App credentials (optional) ────────────────────────────────────────
+# Only needed if users connect GitHub via App mode. Leave empty for PAT-only.
+github:
+  appSlug: "<your-github-app-slug>"
+  appId: ""
+  clientId: ""
+  clientSecret: ""
