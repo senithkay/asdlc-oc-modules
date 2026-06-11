@@ -1,0 +1,6 @@
+# Copyright 2026 WSO2 LLC.
+# SPDX-License-Identifier: Apache-2.0
+
+# Module manifest used by CI.
+# No Docker images to build — only a Helm chart and raw manifests to release.
+images: []
