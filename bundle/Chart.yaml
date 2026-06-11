@@ -1,0 +1,17 @@
+apiVersion: v2
+name: wso2-agentic-engineer-bundle
+description: >
+  Single-command install of WSO2 Agentic Engineer on an OpenChoreo cluster.
+  Installs platform services (asdlc-api, agents-service, console, postgres)
+  and registers all OpenChoreo extension resources in one shot.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+dependencies:
+  - name: wso2-agentic-engineer
+    version: "0.1.0"
+    repository: "file://charts/wso2-agentic-engineer"
+  - name: wso2-ae-platform-resources
+    version: "0.1.0"
+    repository: "file://charts/wso2-ae-platform-resources"

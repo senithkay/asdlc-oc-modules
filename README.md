@@ -39,7 +39,7 @@ Workflow Plane cluster
 ## Prerequisites
 
 - OpenChoreo v1.0.0 installed
-- `kubectl`, `helm` v3.x, `envsubst` available
+- `kubectl` and `helm` v3.x available
 - Docker images built and pushed to a registry (see Building Images below)
 
 ## Step 1 — Install Gateway Operator on the data plane
@@ -63,53 +63,51 @@ helm install gateway-operator \
   --set gateway.helm.chartVersion="0.9.0"
 ```
 
-## Step 3 — Install the platform services
+## Step 2 — Install everything in one command
 
-Edit `values/agentic-engineer.yaml` with your domain and Anthropic key, then:
+Edit `values/agentic-engineer.yaml` with your domain and credentials, then:
 
 ```bash
 helm install wso2-agentic-engineer \
-  oci://ghcr.io/senithkay/wso2-agentic-engineer \
+  oci://ghcr.io/senithkay/wso2-agentic-engineer-bundle \
   --version 0.1.0 \
   --namespace wso2-ae \
   --create-namespace \
   -f values/agentic-engineer.yaml
 ```
 
-No manual secret creation needed — the chart auto-generates `GITHUB_WEBHOOK_SECRET`,
-`OAUTH_STATE_SIGNING_KEY`, the RSA task signing key, and the PostgreSQL password on first install.
+This single command:
+1. Creates the `wso2-ae` namespace
+2. Deploys all platform services (asdlc-api, agents-service, console, postgres, openbao)
+3. Auto-generates all secrets (webhook secret, OAuth state key, postgres password, RSA task signing key)
+4. Registers ClusterComponentType, ClusterTrait, ClusterWorkflow, ClusterAuthzRoleBinding into OC
+5. Exposes the console and API through the OC gateway via HTTPRoutes
 
-## Step 4 — Register into OpenChoreo
+No manual secret creation or `kubectl apply` steps needed.
 
-```bash
-# Wait for OC controller webhook
-kubectl wait -n openchoreo-control-plane \
-  --for=condition=available --timeout=300s \
-  deployment/controller-manager
+## Values reference
 
-kubectl apply -f resources/rbac.yaml
-kubectl apply -f resources/docker-build-workflow.yaml
-kubectl apply -f resources/app-factory-coding-agent.yaml
+See `values/agentic-engineer.yaml` for the minimal override file. Key fields:
 
-helm install wso2-ae-platform-resources \
-  oci://ghcr.io/senithkay/wso2-ae-platform-resources \
-  --version 0.1.0
-```
+| Value | Description |
+|---|---|
+| `expose.consoleHostname` | DNS hostname for the console (e.g. `asdlc.example.com`) |
+| `expose.apiHostname` | DNS hostname for the API (e.g. `asdlc-api.example.com`) |
+| `wso2-agentic-engineer.console.publicURL` | Full public URL for the console |
+| `wso2-agentic-engineer.console.thunderPublicURL` | Full public URL for Thunder IdP |
+| `wso2-agentic-engineer.anthropic.apiKey` | Anthropic API key for AI flows |
+| `wso2-agentic-engineer.openbao.token` | OpenBao token (default: `root`, override for prod) |
+| `wso2-agentic-engineer.github.appSlug` | GitHub App slug (optional, for App-mode GitHub connect) |
 
-## Step 5 — Expose via the OC gateway
+## DNS setup
 
-```bash
-export AE_CONSOLE_HOSTNAME=asdlc.example.com
-export AE_API_HOSTNAME=asdlc-api.example.com
+After install, get the OC gateway LoadBalancer IP:
 
-envsubst < resources/httproute-console.yaml | kubectl apply -f -
-envsubst < resources/httproute-api.yaml | kubectl apply -f -
-```
-
-Create DNS records pointing both hostnames to the OC gateway LoadBalancer IP:
 ```bash
 kubectl get svc -n openchoreo-control-plane -l app=gateway-default
 ```
+
+Create DNS A records pointing `expose.consoleHostname` and `expose.apiHostname` to that IP.
 
 ## Verification
 
@@ -129,7 +127,7 @@ kubectl get httproute -n wso2-ae
 
 ## Building Images
 
-If you're building from source rather than using pre-published images:
+If building from source rather than using pre-published images:
 
 ```bash
 cd /path/to/wso2-agentic-engineer-2
@@ -143,28 +141,43 @@ docker push ghcr.io/<your-org>/agents-service:latest
 docker push ghcr.io/<your-org>/asdlc-console:latest
 ```
 
-Then override image repositories in values:
+Then override image repositories in `values/agentic-engineer.yaml`:
+
 ```yaml
-asdlcApi:
-  image:
-    repository: ghcr.io/<your-org>/asdlc-api
-agentsService:
-  image:
-    repository: ghcr.io/<your-org>/agents-service
-console:
-  image:
-    repository: ghcr.io/<your-org>/asdlc-console
+wso2-agentic-engineer:
+  asdlcApi:
+    image:
+      repository: ghcr.io/<your-org>/asdlc-api
+  agentsService:
+    image:
+      repository: ghcr.io/<your-org>/agents-service
+  console:
+    image:
+      repository: ghcr.io/<your-org>/asdlc-console
 ```
 
-## Uninstallation
+## Upgrading
 
 ```bash
-kubectl delete -f resources/httproute-console.yaml
-kubectl delete -f resources/httproute-api.yaml
-helm uninstall wso2-ae-platform-resources
+helm upgrade wso2-agentic-engineer \
+  oci://ghcr.io/senithkay/wso2-agentic-engineer-bundle \
+  --version <new-version> \
+  --namespace wso2-ae \
+  -f values/agentic-engineer.yaml
+```
+
+Auto-generated secrets (webhook secret, OAuth state key, postgres password) are preserved across upgrades.
+
+## Uninstalling
+
+```bash
 helm uninstall wso2-agentic-engineer -n wso2-ae
-kubectl delete -f resources/app-factory-coding-agent.yaml
-kubectl delete -f resources/docker-build-workflow.yaml
-kubectl delete -f resources/rbac.yaml
+
+# Clean up OC resources (not removed by helm uninstall)
+kubectl delete clusterworkflow dockerfile-builder app-factory-coding-agent
+kubectl delete clustercomponenttype service web-application
+kubectl delete clustertrait api-configuration
+kubectl delete clusterauthzrolebinding asdlc-api-client-binding administrators-group-binding
+
 kubectl delete namespace wso2-ae
 ```
